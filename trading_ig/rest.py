@@ -951,6 +951,7 @@ class IGService:
         stop_level,
         trailing_stop,
         trailing_stop_increment,
+        deal_reference,
         session=None,
     ):
         """Creates an OTC position"""
@@ -973,6 +974,7 @@ class IGService:
             "stopLevel": stop_level,
             "trailingStop": trailing_stop,
             "trailingStopIncrement": trailing_stop_increment,
+            "dealReference": deal_reference,
         }
 
         endpoint = "/positions/otc"
