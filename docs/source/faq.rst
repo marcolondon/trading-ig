@@ -84,9 +84,9 @@ This is the rate used when a new IGService object is created with the use_rate_l
 How to avoid hitting the rate limits?
 -------------------------------------
 
-There are three options. 
+There are three options.
 
-The first is manage it yourself with your own code. 
+The first is manage it yourself with your own code.
 
 Secondly, since version 0.0.10, ``trading-ig``
 has support for `tenacity <https://github.com/jd/tenacity>`_, a general purpose retrying library. You can initialise
@@ -115,7 +115,7 @@ The final option, is to initialise the ``IGService`` class with ``use_rate_limit
         retry=retry_if_exception_type(ApiExceededException))
     ig_service = IGService('username', 'password', 'api_key', retryer=retryer, use_rate_limiter=True)
 
-The rate limiter queries the API for the request limits associated with the API key you logged in with when the 
+The rate limiter queries the API for the request limits associated with the API key you logged in with when the
 session is created.
 
 There are four limit types `defined by the API <https://labs.ig.com/rest-trading-api-reference/service-detail?id=595>`_:
@@ -123,7 +123,7 @@ There are four limit types `defined by the API <https://labs.ig.com/rest-trading
 .. list-table::
    :widths: 50 50
 
-   * - allowanceAccountHistoricalData 
+   * - allowanceAccountHistoricalData
      - Historical price data data points per minute allowance
    * - allowanceAccountOverall
      - Per account request per minute allowance
@@ -140,17 +140,17 @@ It also does not use allowanceAccountHistoricalData becuase this has not yet bee
 allowanceAccountOverall is used to set the rate for non-trading requests.
 allowanceAccountTrading is used to set the rate for trading requests.
 
-The rate limiter actually uses the published values per minute less two, largely to account 
+The rate limiter actually uses the published values per minute less two, largely to account
 for the session refresh overhead which happens every 60 seconds. You may still see some 403 errors,
 but it should be a lot less.
 
 The rate limiter uses these values to effectively release a token for each rate at the required interval.
-Methods which make requests will block briefly waiting for a new token to be released for the 
-associated rate limit. 
+Methods which make requests will block briefly waiting for a new token to be released for the
+associated rate limit.
 
 When the rate limiter is enabled, the number of requests sent and availble per minute is shown by the logging.
 
-The rate limiter functionality uses threads which exit when ``IGService.logout()`` is called, so it is 
+The rate limiter functionality uses threads which exit when ``IGService.logout()`` is called, so it is
 important to ensure log out happens or these threads will be left spinning until ``__del__()`` cleans them up.
 
 Why do see an error like ``REJECT_CFD_ORDER_ON_SPREADBET_ACCOUNT``?
@@ -211,12 +211,18 @@ solutions:
 
 How do I check my PR will pass CI checks?
 -----------------------------------------
-This project uses some automated continuous integration (CI) processes whenever any code is committed, or if someone
-creates a PR. There are unit tests, and linting with ``flake8``. In addition, an integration test gets executed
-every night. The integration test takes a long time due to the :ref:`rate limits<rate_limits>`. Before
-making a PR, please make sure the tests pass. For linting::
+This project uses some automated continuous integration (CI) processes whenever
+any code is committed, or if someone creates a PR. There are unit tests, code
+formatting with ``black``, and linting with ``flake8``. In addition, an
+integration test gets executed every night. The integration test takes a long
+time due to the :ref:`rate limits<rate_limits>`. Before making a PR, please make
+sure the tests pass - PRs will be rejected if they do not. For code formatting::
 
-    $ poetry run flake8 trading_ig
+    $ poetry run black .
+
+and for linting::
+
+    $ poetry run flake8 trading_ig docs sample tests
 
 for unit tests::
 

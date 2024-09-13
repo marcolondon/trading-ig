@@ -62,6 +62,7 @@ environment variables
     $ export IG_SERVICE_PASSWORD="your_password"
     $ export IG_SERVICE_API_KEY="your_api_key"
     $ export IG_SERVICE_ACC_NUMBER="your_account_number"
+    $ export IG_SERVICE_ACC_TYPE="your_acc_type"
 
 
 Connection
@@ -140,3 +141,12 @@ Assuming config as above
 >>> sub.addlistener(on_update)
 >>> ig_stream_service.ls_client.subscribe(sub)
 >>> ig_stream_service.disconnect()
+
+
+Using the Streamer classes to connect with the Streaming API
+------------------------------------------------------------
+
+See the streamer samples:
+
+* `sample/sample_ticker.py <https://github.com/ig-python/trading-ig/blob/master/sample/sample_ticker.py>`_
+* `sample/sample_ticker_rich.py <https://github.com/ig-python/trading-ig/blob/master/sample/sample_ticker_rich.py>`_
