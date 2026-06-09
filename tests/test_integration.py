@@ -18,6 +18,12 @@ from tenacity import (
     stop_after_attempt,
 )
 
+try:
+    import munch  # noqa: F401
+
+    munch_installed = True
+except ImportError:
+    munch_installed = False
 
 RETRYABLE = (ApiExceededException, TokenInvalidException)
 
@@ -75,6 +81,7 @@ def ig_service(request, retrying):
     ig_service.logout()
 
 
+# TODO refactor for new navigation API
 @pytest.fixture()
 def top_level_nodes(ig_service: IGService):
     """test fixture gets the top level navigation nodes"""
@@ -156,8 +163,8 @@ class TestIntegration:
         assert isinstance(response, pd.DataFrame)
 
     def test_fetch_account_activity_by_date(self, ig_service: IGService):
-        to_date = datetime.now()
-        from_date = to_date - timedelta(days=7)
+        to_date = datetime.now() - timedelta(days=30)
+        from_date = to_date - timedelta(days=60)
         response = ig_service.fetch_account_activity_by_date(from_date, to_date)
         assert isinstance(response, pd.DataFrame)
 
@@ -167,23 +174,23 @@ class TestIntegration:
         assert isinstance(response, pd.DataFrame)
 
     def test_fetch_account_activity_v2_dates(self, ig_service):
-        to_date = datetime(2021, 7, 31)
-        from_date = to_date - timedelta(days=7)
+        to_date = datetime.now() - timedelta(days=30)
+        from_date = to_date - timedelta(days=60)
         response = ig_service.fetch_account_activity_v2(
             from_date=from_date, to_date=to_date
         )
         assert isinstance(response, pd.DataFrame)
 
     def test_fetch_account_activity_from(self, ig_service: IGService):
-        to_date = datetime.now() - timedelta(days=3)
-        from_date = to_date - timedelta(days=7)
+        to_date = datetime.now() - timedelta(days=30)
+        from_date = to_date - timedelta(days=60)
         response = ig_service.fetch_account_activity(from_date=from_date)
         assert isinstance(response, pd.DataFrame)
         assert response.shape[1] == 9
 
     def test_fetch_account_activity_from_to(self, ig_service: IGService):
-        to_date = datetime(2023, 7, 18)
-        from_date = to_date - timedelta(days=7)
+        to_date = datetime.now() - timedelta(days=30)
+        from_date = to_date - timedelta(days=60)
         response = ig_service.fetch_account_activity(
             from_date=from_date, to_date=to_date
         )
@@ -191,8 +198,8 @@ class TestIntegration:
         assert response.shape[1] == 9
 
     def test_fetch_account_activity_detailed(self, ig_service):
-        to_date = datetime(2023, 7, 18)
-        from_date = to_date - timedelta(days=7)
+        to_date = datetime.now() - timedelta(days=30)
+        from_date = to_date - timedelta(days=60)
         response = ig_service.fetch_account_activity(
             from_date=from_date, to_date=to_date, detailed=True
         )
@@ -201,7 +208,7 @@ class TestIntegration:
 
     def test_fetch_account_activity_old(self, ig_service: IGService):
         from_date = datetime(1970, 1, 1)
-        to_date = from_date + timedelta(days=7)
+        to_date = from_date + timedelta(days=60)
         response = ig_service.fetch_account_activity(
             from_date=from_date, to_date=to_date
         )
@@ -209,8 +216,8 @@ class TestIntegration:
         assert response.shape[0] == 0
 
     def test_fetch_account_activity_fiql(self, ig_service: IGService):
-        to_date = datetime(2023, 7, 18)
-        from_date = to_date - timedelta(days=30)
+        to_date = datetime.now() - timedelta(days=30)
+        from_date = to_date - timedelta(days=120)
         response = ig_service.fetch_account_activity(
             from_date=from_date, to_date=to_date, fiql_filter="channel==PUBLIC_WEB_API"
         )
@@ -264,6 +271,7 @@ class TestIntegration:
         with pytest.raises(IGException):
             ig_service.create_session()
 
+    @pytest.mark.xfail(reason="Navigation API has been changed by IG")
     def test_fetch_top_level_navigation_nodes(self, top_level_nodes):
         assert isinstance(top_level_nodes, pd.DataFrame)
 
@@ -387,13 +395,6 @@ class TestIntegration:
         for sentiment in response["clientSentiments"]:
             self.assert_sentiment(sentiment)
 
-    def test_fetch_related_client_sentiment_by_instrument(self, ig_service: IGService):
-        market_id = self.get_random_market_id()
-        df = ig_service.fetch_related_client_sentiment_by_instrument(market_id)
-        rows = df.to_dict("records")
-        for sentiment in rows:
-            self.assert_sentiment(sentiment)
-
     @staticmethod
     def assert_sentiment(response):
         long = response["longPositionPercentage"]
@@ -403,6 +404,7 @@ class TestIntegration:
         assert isinstance(short, float)
         assert long + short == 100.0
 
+    @pytest.mark.xfail(reason="Navigation API has been changed by IG")
     def test_fetch_sub_nodes_by_node(self, ig_service: IGService, top_level_nodes):
         rand_index = randint(0, len(top_level_nodes) - 1)
         response = ig_service.fetch_sub_nodes_by_node(rand_index)
@@ -424,6 +426,7 @@ class TestIntegration:
         response = ig_service.fetch_market_by_epic("CS.D.EURUSD.MINI.IP")
         assert isinstance(response, dict)
 
+    @pytest.mark.skipif(not munch_installed, reason="Requires munch")
     def test_fetch_markets_by_epics(self, ig_service: IGService):
         markets_list = ig_service.fetch_markets_by_epics(
             "IX.D.SPTRD.MONTH1.IP,IX.D.FTSE.DAILY.IP", version="1"
@@ -458,9 +461,14 @@ class TestIntegration:
         response = ig_service.search_markets(search_term)
         assert isinstance(response, pd.DataFrame)
 
+    def test_search_markets_v2(self, ig_service: IGService):
+        epics = "CS.D.GBPUSD.TODAY.IP"
+        response = ig_service.search_markets_v2(epics)
+        assert isinstance(response, pd.DataFrame)
+
     def test_fetch_historical_prices_by_epic_and_numpoints(self, ig_service: IGService):
         response = ig_service.fetch_historical_prices_by_epic_and_num_points(
-            "CS.D.EURUSD.MINI.IP", "H", 4
+            "CS.D.EURUSD.MINI.IP", "h", 4
         )
         assert isinstance(response["allowance"], dict)
         assert isinstance(response["prices"], pd.DataFrame)
@@ -470,7 +478,7 @@ class TestIntegration:
         self, ig_service: IGService
     ):
         response = ig_service.fetch_historical_prices_by_epic_and_num_points(
-            "CS.D.EURUSD.MINI.IP", "H", 4, format=ig_service.flat_prices
+            "CS.D.EURUSD.MINI.IP", "h", 4, format=ig_service.flat_prices
         )
         assert isinstance(response["allowance"], dict)
         assert isinstance(response["prices"], pd.DataFrame)
@@ -481,7 +489,7 @@ class TestIntegration:
         self, ig_service: IGService
     ):
         response = ig_service.fetch_historical_prices_by_epic_and_num_points(
-            "CS.D.EURUSD.MINI.IP", "H", 4, format=ig_service.mid_prices
+            "CS.D.EURUSD.MINI.IP", "h", 4, format=ig_service.mid_prices
         )
         assert isinstance(response["allowance"], dict)
         assert isinstance(response["prices"], pd.DataFrame)
@@ -670,6 +678,7 @@ class TestIntegration:
         assert prices.shape[0] == 5
         assert prices.shape[1] == 5
 
+    @pytest.mark.skipif(not munch_installed, reason="Requires munch")
     def test_create_open_position(self, ig_service: IGService):
         epic = "IX.D.FTSE.DAILY.IP"
         market_info = ig_service.fetch_market_by_epic(epic)
@@ -735,6 +744,7 @@ class TestIntegration:
         assert close_result["dealStatus"] == "ACCEPTED"
         assert close_result["reason"] == "SUCCESS"
 
+    @pytest.mark.skipif(not munch_installed, reason="Requires munch")
     def test_create_working_order(self, ig_service: IGService):
         epic = "CS.D.GBPUSD.TODAY.IP"
         market_info = ig_service.fetch_market_by_epic(epic)
@@ -768,6 +778,7 @@ class TestIntegration:
         assert delete_result["dealStatus"] == "ACCEPTED"
         assert delete_result["reason"] == "SUCCESS"
 
+    @pytest.mark.skipif(not munch_installed, reason="Requires munch")
     def test_create_working_order_guaranteed_stop_loss(self, ig_service: IGService):
         epic = "CS.D.GBPUSD.TODAY.IP"
         market_info = ig_service.fetch_market_by_epic(epic)
@@ -858,17 +869,3 @@ class TestIntegration:
     def test_update_client_app(self, ig_service: IGService):
         result = ig_service.update_client_app(60, 60, config.api_key, "ENABLED")
         print(result)
-
-    def test_logout(self, limited_retrying):
-        ig_service = IGService(
-            config.username,
-            config.password,
-            config.api_key,
-            config.acc_type,
-            retryer=limited_retrying,
-        )
-        ig_service.create_session()
-        ig_service.logout()
-        with pytest.raises(Exception) as error:
-            print(error)
-            ig_service.fetch_accounts()

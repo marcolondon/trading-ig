@@ -33,7 +33,7 @@ if _HAS_MUNCH:
     from .utils import munchify
 
 if _HAS_PANDAS:
-    from .utils import pd, np
+    from .utils import pd
     from pandas import json_normalize
 
 from threading import Thread
@@ -359,10 +359,9 @@ class IGService:
         if session is None:
             session = self.session  # requests Session
         else:
-            assert isinstance(
-                session, Session
-            ), "session must be <requests.session.Session object> not %s" % type(
-                session
+            assert isinstance(session, Session), (
+                "session must be <requests.session.Session object> not %s"
+                % type(session)
             )
             session = session
         return session
@@ -1390,6 +1389,33 @@ class IGService:
         else:
             raise IGException(response.text)
 
+    def fetch_repeat_dealing_window(self, epic=None, session=None):
+        """
+        Returns repeat dealing window status for account
+        :param epic: filter epic, optional
+        :type epic: str
+        :param session: session object, optional
+        :type session: Session
+        :return: repeat dealing windows for recently traded epics
+        :rtype: dict
+        """
+        self.non_trading_rate_limit_pause_or_pass()
+        version = "1"
+        params = {}
+        if epic is not None:
+            params["epic"] = epic
+        endpoint = "/repeat-dealing-window"
+        action = "read"
+        for i in range(5):
+            response = self._req(action, endpoint, params, session, version)
+            if not response.status_code == 200:
+                logger.info("Error fetching repeat dealing window, retrying.")
+                time.sleep(1)
+            else:
+                break
+        data = self.parse_response(response.text)
+        return data
+
     # -------- END -------- #
 
     # -------- MARKETS -------- #
@@ -1544,6 +1570,19 @@ class IGService:
             data = pd.DataFrame(data["markets"])
         return data
 
+    def search_markets_v2(self, epics, session=None):
+        """Returns all markets matching the epics"""
+        self.non_trading_rate_limit_pause_or_pass()
+        version = "2"
+        endpoint = "/markets"
+        params = {"epics": epics}
+        action = "read"
+        response = self._req(action, endpoint, params, session, version)
+        data = self.parse_response(response.text)
+        if self.return_dataframe:
+            data = pd.DataFrame(data["marketDetails"])
+        return data
+
     def format_prices(self, prices, version, flag_calc_spread=False):
         """
         Format prices data as a DataFrame with hierarchical columns
@@ -1615,6 +1654,11 @@ class IGService:
             keys.append("last")
 
         df2 = pd.concat(data, axis=1, keys=keys)
+
+        # force all object columns to be numeric, NaN if error
+        for col in df2.select_dtypes(include=["object"]).columns:
+            df2[col] = pd.to_numeric(df2[col], errors="coerce")
+
         return df2
 
     def flat_prices(self, prices, version):
@@ -1639,9 +1683,11 @@ class IGService:
         if version == "3":
             df = df.set_index("snapshotTimeUTC")
             df = df.drop(columns=["snapshotTime"])
+            date_format = "%Y-%m-%dT%H:%M:%S"
         else:
             df = df.set_index("snapshotTime")
-        df.index = pd.to_datetime(df.index, format=DATE_FORMATS[int(version)])
+            date_format = DATE_FORMATS[int(version)]
+        df.index = pd.to_datetime(df.index, format=date_format)
         df.index.name = "DateTime"
         df = df.drop(
             columns=[
@@ -1689,9 +1735,11 @@ class IGService:
         if version == "3":
             df = df.set_index("snapshotTimeUTC")
             df = df.drop(columns=["snapshotTime"])
+            date_format = "%Y-%m-%dT%H:%M:%S"
         else:
             df = df.set_index("snapshotTime")
-        df.index = pd.to_datetime(df.index, format=DATE_FORMATS[int(version)])
+            date_format = DATE_FORMATS[int(version)]
+        df.index = pd.to_datetime(df.index, format=date_format)
         df.index.name = "DateTime"
 
         df["Open"] = df[["openPrice.bid", "openPrice.ask"]].mean(axis=1)
@@ -1800,7 +1848,6 @@ class IGService:
             format = self.format_prices
         if self.return_dataframe:
             data["prices"] = format(data["prices"], version)
-            data["prices"] = data["prices"].fillna(value=np.nan)
         self.log_allowance(data["metadata"])
         return data
 
@@ -1822,7 +1869,6 @@ class IGService:
             format = self.format_prices
         if self.return_dataframe:
             data["prices"] = format(data["prices"], version)
-            data["prices"] = data["prices"].fillna(value=np.nan)
         return data
 
     def fetch_historical_prices_by_epic_and_date_range(
@@ -1886,7 +1932,6 @@ class IGService:
             format = self.format_prices
         if self.return_dataframe:
             data["prices"] = format(data["prices"], version)
-            data["prices"] = data["prices"].fillna(value=np.nan)
         return data
 
     def log_allowance(self, data):

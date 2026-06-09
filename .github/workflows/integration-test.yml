@@ -12,22 +12,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - uses: actions/checkout@v6
 
-    - uses: actions/checkout@v4
-
-    - name: Set up Python 3.8
-      uses: actions/setup-python@v5
+    - name: Install uv and setup Python
+      uses: astral-sh/setup-uv@v7
       with:
-        python-version: 3.8
-
-    - name: Install Poetry
-      uses: abatilo/actions-poetry@v2
-      with:
-        poetry-version: 1.8.2
+        version: "0.11.6"
+        python-version: "3.10"
 
     - name: Install dependencies
       run: |
-        python -m poetry install --extras "pandas munch tenacity"
+        uv sync --all-extras --dev
 
     - name: Integration test with pytest
       env:
@@ -37,11 +32,11 @@ jobs:
         IG_SERVICE_ACC_TYPE:  ${{ secrets.IG_SERVICE_ACC_TYPE }}
         IG_SERVICE_ACC_NUMBER:  ${{ secrets.IG_SERVICE_ACC_NUMBER_1 }}
       run: |
-        poetry run coverage run -m --source=trading_ig pytest --log-cli-level=DEBUG --log-format="%(asctime)s %(levelname)s %(message)s" --log-date-format="%Y-%m-%d %H:%M:%S"
-        poetry run coverage report
+        uv run coverage run -m --source=trading_ig pytest --log-cli-level=DEBUG --log-format="%(asctime)s %(levelname)s %(message)s" --log-date-format="%Y-%m-%d %H:%M:%S"
+        uv run coverage report
 
     - name: Coveralls
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        poetry run coveralls --service=github
+        uv run coveralls --service=github

@@ -1,13 +1,12 @@
 import sys
 import logging
+from datetime import datetime
 
 from lightstreamer.client import (
-    LightstreamerClient,
     Subscription,
-    ConsoleLoggerProvider,
-    ConsoleLogLevel,
     SubscriptionListener,
     ItemUpdate,
+    ClientListener,
 )
 
 from trading_ig import IGService, IGStreamService
@@ -16,8 +15,6 @@ from sample.sample_utils import crypto_epics, wait_for_input
 
 logger = logging.getLogger(__name__)
 
-loggerProvider = ConsoleLoggerProvider(ConsoleLogLevel.INFO)
-LightstreamerClient.setLoggerProvider(loggerProvider)
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -39,28 +36,30 @@ def ig_stream_sample():
     ig_stream_service.create_session()
     # ig_stream_service.create_session(version='3')
 
-    # create a new MARKET Subscription
-    market_subscription = Subscription(
+    # create a new PRICE Subscription
+    price_subscription = Subscription(
         mode="MERGE",
         # fx_epics, index_epics, weekend_epics, futures_epics, cfd_fx_epics
-        items=[f"MARKET:{epic}" for epic in crypto_epics],
+        items=[f"PRICE:{config.acc_number}:{epic}" for epic in crypto_epics],
         fields=[
-            "UPDATE_TIME",
-            "BID",
-            "OFFER",
-            "CHANGE",
-            "MARKET_STATE",
-            "CHANGE_PCT",
+            "TIMESTAMP",
+            "BIDPRICE1",
+            "ASKPRICE1",
+            "NET_CHG",
+            "DLG_FLAG",
+            "NET_CHG_",
             "HIGH",
             "LOW",
         ],
     )
 
-    # adding a listener to MARKET subscription
-    market_subscription.addListener(MarketListener())
+    price_subscription.setDataAdapter("Pricing")
 
-    # registering the MARKET subscription
-    ig_stream_service.subscribe(market_subscription)
+    # adding a listener to PRICE subscription
+    price_subscription.addListener(PriceListener())
+
+    # registering the PRICE subscription
+    ig_stream_service.subscribe(price_subscription)
 
     # create a new ACCOUNT subscription
     account_subscription = Subscription(
@@ -88,6 +87,9 @@ def ig_stream_sample():
     # registering the TRADE subscription
     ig_stream_service.subscribe(trade_subscription)
 
+    # adding a ClientListener
+    ig_stream_service.add_client_listener(StatusListener())
+
     # await updates
     wait_for_input()
 
@@ -95,27 +97,28 @@ def ig_stream_sample():
     ig_stream_service.disconnect()
 
 
-class MarketListener(SubscriptionListener):
+class PriceListener(SubscriptionListener):
     def onItemUpdate(self, update: ItemUpdate):
         logger.info(
-            f"{update.getValue('UPDATE_TIME')} {update.getItemName()} "
-            f"Bid: {update.getValue('BID')}, "
-            f"Offer: {update.getValue('OFFER')}, "
-            f"Price change: {update.getValue('CHANGE')}, "
-            f"State: {update.getValue('MARKET_STATE')}, "
-            f"Change: {update.getValue('CHANGE_PCT')}%, "
+            f"{datetime.fromtimestamp(int(update.getValue('TIMESTAMP')) / 1000).strftime('%Y-%m-%d %H:%M:%S')} "
+            f"{update.getItemName()} "
+            f"Bid: {update.getValue('BIDPRICE1')}, "
+            f"Offer: {update.getValue('ASKPRICE1')}, "
+            f"Price change: {update.getValue('NET_CHG')}, "
+            f"State: {update.getValue('DLG_FLAG').strip()}, "
+            f"Change: {update.getValue('NET_CHG_')}%, "
             f"High: {update.getValue('HIGH')}, "
             f"Low: {update.getValue('LOW')}"
         )
 
     def onSubscription(self):
-        logger.info("MarketListener onSubscription()")
+        logger.info("PriceListener onSubscription()")
 
     def onSubscriptionError(self, code, message):
-        logger.info(f"MarketListener onSubscriptionError(): '{code}' {message}")
+        logger.info(f"PriceListener onSubscriptionError(): '{code}' {message}")
 
     def onUnsubscription(self):
-        logger.info("MarketListener onUnsubscription()")
+        logger.info("PriceListener onUnsubscription()")
 
 
 class AccountListener(SubscriptionListener):
@@ -157,6 +160,11 @@ class TradeListener(SubscriptionListener):
 
     def onUnsubscription(self):
         logger.info("TradeListener onUnsubscription()")
+
+
+class StatusListener(ClientListener):
+    def onStatusChange(self, status):
+        print(f"{datetime.now()}: ***** {status} *****")
 
 
 if __name__ == "__main__":
